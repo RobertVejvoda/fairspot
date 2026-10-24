@@ -45,11 +45,15 @@ When requesting Claude validation, ask for a focused review of gaps, contradicti
 
 ## Cooperation Model
 
+Named implementation and review agents, exact models, and reasoning effort settings are recommendations, not requirements, unless Robert explicitly requires a selection for particular work. An otherwise authorized session does not stop or ask for confirmation solely because its agent or model differs from a recommendation.
+
+Record the actual implementer and independent reviewer in issue/PR attribution and workflow fields. A different model or session of the same agent does not create an independent reviewer. This guidance does not authorize new paid sessions or bypass existing automation, validation, or merge guards. Agent names in manual handoffs below describe recommended defaults; use the actual independent reviewer when a different reviewer is selected.
+
 See `AGENT_COOPERATION.md` at the repo root for the full Codex / Claude cooperation reference. The sections below record which parts of that guide are in effect for FPS today; treat any guidance in the file that contradicts this list as background context, not policy.
 
 **In effect**
-- Roles follow the **invocation, not the agent name**. **By default Codex is the Product Owner and reviewer** (`chatgpt-codex-connector`, via `@codex review`) — it keeps reviewing everyone else's PRs as normal. **Assigning Codex an issue** instead invokes its coding-agent / **implementer** role (`openai-code-agent`, opens a branch/PR), exactly as issue-assigning Claude (`anthropic-code-agent`) or Copilot (`copilot-swe-agent`) does. The hard per-PR invariant is that the **Implementer differs from both Reviewer and Merger**; Reviewer and Merger need not be different actors for every PR. Codex must not review or merge a PR it implemented itself (such a PR is reviewed by Claude or a human), but its default reviewer role is otherwise unchanged. Likewise Claude and Copilot never review or merge their own implementations.
-- Default Claude model for routine implementation: `claude-sonnet-4.6`. Escalate to Opus only for hard problems.
+- Roles follow the **invocation, not the agent name**. **By default Codex is the Product Owner and reviewer** (`chatgpt-codex-connector`, via `@codex review`) — it keeps reviewing everyone else's PRs as normal. **Assigning Codex an issue** instead invokes its coding-agent / **implementer** role (`openai-code-agent`, opens a branch/PR), exactly as issue-assigning Claude (`anthropic-code-agent`) or Copilot (`copilot-swe-agent`) does. The hard per-PR invariant is that the **Implementer differs from both Reviewer and Merger**; Reviewer and Merger need not be different actors for every PR. Codex must not review or merge a PR it implemented itself (such a PR needs a different agent or human reviewer), but its default reviewer role is otherwise unchanged. Likewise Claude and Copilot never review or merge their own implementations.
+- Recommended Claude model for routine implementation: `claude-sonnet-4.6`; Opus is a recommendation for harder problems. Neither is a required selection, and exact model or effort evidence is optional.
 - GitHub Copilot Pro+ may be used as an implementation route for controlled experiments and broader slices when Codex prepares tight scope, acceptance criteria, expected files, and validation evidence.
 - Architectural decisions go to `docs/versions-and-decisions.md` and require human approval (neither agent decides alone).
 - Cost-management tips: keep agent-facing docs lean, scope tasks tightly to files expected to change, compact long sessions.
@@ -97,7 +101,7 @@ The realised delivery pipeline (the "B2" model) deliberately uses three actors: 
 - **Reviewer — Codex** (`chatgpt-codex-connector[bot]`). Codex reviews as a PR **comment** (not a formal approval) carrying a `Reviewed commit: <sha>` marker. Its "On PR open" auto-review **skips drafts**, and Copilot opens drafts, so `.github/workflows/agent-review-handoff.yml` posts `@codex review` when the PR is marked ready.
 - **Merger — the "Fairspot Delivery Bot" GitHub App** (App ID `4339995`; per-repo secret `APP_PRIVATE_KEY` + variable `APP_ID`; perms Contents/Issues/Pull requests R&W). `.github/workflows/agent-auto-merge.yml` squash-merges as the App bot only when every guard passes — clean Codex verdict, Copilot author, same-repo, reviewed-SHA == head, `mergeable_state == clean`, and a **low-risk diff**. It is **OFF by default**; activate per repo with the `AUTO_MERGE_ENABLED=true` repository variable (set it `false` to emergency-stop).
 
-**Codex has two invocation modes — role follows the invocation, not the name.** Assigning an *issue* to Codex (`openai-code-agent`) invokes it as an **Implementer** — it opens a branch/PR, exactly as assigning an issue to Claude (`anthropic-code-agent`) or Copilot (`copilot-swe-agent`) does. A `@codex review` comment (or configured auto-review) invokes `chatgpt-codex-connector` as the **Reviewer** — its default role. The restriction is narrow: Codex must **not** review or merge *the PR it implemented itself*; it still reviews every other PR as usual. When Codex is the implementer of a PR the automated pipeline deliberately does not apply — the auto-merge gate requires a Copilot author and skips Codex-authored PRs, and the review handoff only pings Codex for Copilot PRs, so it never asks Codex to review its own work. Route a Codex-authored PR's review to **Claude or a human**. The same holds for Claude- and human-authored PRs: someone else reviews them, and the implementer never self-reviews or self-merges. The accepting independent reviewer may merge a low-risk PR; high-risk PRs stay human-controlled. (Corollary: use *bounded, per-PR `@codex review`* requests for review work — assigning a review/triage task to Codex as an **issue** invokes the implementer channel instead and opens a WIP PR, as issue #842 showed.)
+**Codex has two invocation modes — role follows the invocation, not the name.** Assigning an *issue* to Codex (`openai-code-agent`) invokes it as an **Implementer** — it opens a branch/PR, exactly as assigning an issue to Claude (`anthropic-code-agent`) or Copilot (`copilot-swe-agent`) does. A `@codex review` comment (or configured auto-review) invokes `chatgpt-codex-connector` as the **Reviewer** — its default role. The restriction is narrow: Codex must **not** review or merge *the PR it implemented itself*; it still reviews every other PR as usual. When Codex is the implementer of a PR the automated pipeline deliberately does not apply — the auto-merge gate requires a Copilot author and skips Codex-authored PRs, and the review handoff only pings Codex for Copilot PRs, so it never asks Codex to review its own work. Route a Codex-authored PR's review to an independent agent or human; Claude is a recommendation. The same holds for Claude- and human-authored PRs: someone else reviews them, and the implementer never self-reviews or self-merges. The accepting independent reviewer may merge a low-risk PR; high-risk PRs stay human-controlled. (Corollary: use *bounded, per-PR `@codex review`* requests for review work — assigning a review/triage task to Codex as an **issue** invokes the implementer channel instead and opens a WIP PR, as issue #842 showed.)
 
 **Merge authority by risk.** A low-risk business or documentation PR may be merged by the independent reviewer who accepted it when all of these remain true: the accepted SHA equals the current head; applicable checks are green; no unresolved actionable current-head finding or terminal automation hold remains; the diff does not touch a repository-defined high-risk path; and it does not introduce an architecture, security, privacy, production, or commercially material decision requiring human approval. A new commit invalidates acceptance and merge readiness. If classification is uncertain, treat the PR as high-risk. Eligible Copilot PRs may still use the separate Delivery App merger; high-risk PRs require human-controlled merge and may require a merger separate from the reviewer.
 
@@ -114,7 +118,7 @@ Per-repo setup, in order: (1) add the repo to Codex code-review preferences; (2)
 
 ### Implementer routing
 
-Three agents can be invoked as **implementers** by assigning them an issue: **Claude** (`anthropic-code-agent`), the **GitHub Copilot agent** (`copilot-swe-agent`, billed under the GitHub subscription), and **Codex** (`openai-code-agent`). A spec can be routed to any of them. (Codex is also the default *reviewer* via `@codex review` — a different invocation of the same agent; the one that implements a given PR must not review it, so a Codex-implemented PR is reviewed by Claude or a human.) Default routing rule:
+Three agents can be invoked as **implementers** by assigning them an issue: **Claude** (`anthropic-code-agent`), the **GitHub Copilot agent** (`copilot-swe-agent`, billed under the GitHub subscription), and **Codex** (`openai-code-agent`). A spec can be routed to any of them. (Codex is also the default *reviewer* via `@codex review` — a different invocation of the same agent; the one that implements a given PR must not review it, so a Codex-implemented PR needs a different agent or human reviewer.) Routing recommendations:
 
 - **Issue placement first** — before creating, routing, splitting, or moving an issue, classify it as one of:
   - **Public open-core**: runtime, fairness, tenant self-administration, auth/security capability, self-hosted/BYOC capability, public product validation, or other work a self-hosted operator reasonably needs. Keep in `fairspot`.
@@ -123,15 +127,15 @@ Three agents can be invoked as **implementers** by assigning them an issue: **Cl
   If classification is unclear, stop at a PO clarification comment instead of silently routing the issue.
 - **Copilot candidate** — slice is mechanical and file-bounded: pattern-following implementation that mirrors an existing example, test-coverage additions, mechanical refactors (renames, extracts, lint cleanup), dependency bumps with a clear repro. Codex's spec is tight (clear acceptance criteria + explicit "files expected to change").
 - **Claude candidate** — slice touches architecture, cross-service flow, or design judgment; spec might be wrong and needs an implementer who can push back; cross-cutting refactors; anything where reading the diff isn't enough to validate.
-- **Copilot Pro+ controlled candidate** — a broader slice may be assigned to Copilot when the goal is to evaluate Pro+ behavior or to preserve Claude quota. Codex must make the scope unusually explicit, name non-goals, list expected files, require validation evidence, and call out safety constraints. Treat the first PR as an implementation proposal that needs strict Codex review, not as automatically equivalent to a Claude implementation.
+- **Copilot Pro+ controlled candidate** — a broader slice may be assigned to Copilot when the goal is to evaluate Pro+ behavior or to preserve Claude quota. Codex must make the scope unusually explicit, name non-goals, list expected files, require validation evidence, and call out safety constraints. Treat the first PR as an implementation proposal that needs strict independent review; Codex is the recommended reviewer.
 
-When Claude or Copilot picks up a Codex-assigned slice, the first step is a routing self-check: if the slice looks better suited to the other implementer, flag it back to Codex/Robert before starting rather than absorbing it silently. If a PR is already open on a slice, do not start a parallel implementation — review the existing PR or wait.
+When an implementer picks up a slice, check scope, capability, and reviewer independence. A different recommended agent or model alone is not a blocker. Escalate a concrete capability, authorization, or independence gap. If a PR is already open on a slice, do not start a parallel implementation — review the existing PR or wait.
 
-Only one implementer owns an issue at a time. If a slice moves from Claude to Copilot, or from Copilot to Claude, update `Owner`, `Implementer`, and the handoff comment before work starts.
+Only one implementer owns an issue at a time. If the actual implementer changes, update `Owner`, `Implementer`, and the handoff comment before work starts. Keep prior material contributors in the attribution record.
 
 ### Implementer Ready-For-Review Gate
 
-Before Claude or Copilot moves a PR to `In review` / `Owner = Codex`, the implementer must complete and report the slice-specific validation checklist from the issue or source-of-truth doc.
+Before any implementer moves a PR to `In review` with the actual independent reviewer as `Owner`, the implementer must complete and report the slice-specific validation checklist from the issue or source-of-truth doc.
 
 For UI and UX work, this includes:
 
@@ -159,8 +163,8 @@ Allowed workflow:
 - `Backlog -> Ready`: Codex has prepared enough scope, acceptance criteria, and validation guidance.
 - `Ready -> Assigned`: a concrete `Owner` is selected or a handoff exists for an agent that must be invoked through UI.
 - `Assigned -> In progress`: the owner starts work.
-- `In progress -> In review`: a PR or implementation result is ready for Codex review.
-- `In review -> Needs changes`: Codex found required changes; `Owner` returns to `Implementer`.
+- `In progress -> In review`: a PR or implementation result is ready for the selected independent reviewer.
+- `In review -> Needs changes`: the independent reviewer found required changes; `Owner` returns to `Implementer`.
 - `Needs changes -> In progress`: implementer is actively fixing review findings.
 - `Blocked`: use only for a concrete dependency, decision, or missing evidence. Set `Owner` to the actor who can unblock it.
 - `Done`: terminal closed/merged/accepted state.
@@ -178,7 +182,7 @@ When Codex signals work to an implementer, include a short comment with:
 - the source-of-truth docs or review comment;
 - whether to implement, revise, pause, or only answer a blocker.
 
-When an implementer finishes, it should set `Status = In review`, `Owner = Codex`, remove stale temporary routing labels when permitted, and leave a concise summary with validation results.
+When an implementer finishes, it should set `Status = In review`, `Owner` to the actual independent reviewer, remove stale temporary routing labels when permitted, and leave a concise summary with validation results.
 If the PR is a draft, the implementer must mark it ready for review when the requested implementation and validation evidence are complete. Do not leave a completed PR in draft state.
 
 ### PR Monitoring Loops
